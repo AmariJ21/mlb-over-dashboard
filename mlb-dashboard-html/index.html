@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB Over 5.5 Runs — Signal Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      color: #e8e8e8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Roboto Mono', monospace; }
+
+    /* ── header ── */
+    .header { margin-bottom: 28px; }
+    .header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .header-title { font-size: 22px; font-weight: 700; color: #e8e8e8; }
+    .live-badge {
+      background: #1a2e12; color: #639922; font-size: 11px; font-weight: 600;
+      padding: 3px 8px; border-radius: 20px; border: 1px solid #2d4d1a;
+    }
+    .header-desc { font-size: 14px; color: #666; line-height: 1.6; max-width: 560px; }
+    .header-meta { margin-top: 8px; font-size: 12px; color: #444; }
+
+    /* ── metrics ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .metric {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .metric-label {
+      font-size: 11px; color: #555;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .metric-val { font-size: 26px; font-weight: 700; color: #e8e8e8; font-family: monospace; }
+    .metric-val.green { color: #639922; }
+    .metric-sub { font-size: 11px; color: #444; margin-top: 4px; }
+
+    /* ── filters ── */
+    .filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-btn {
+      padding: 7px 14px; border-radius: 20px;
+      border: 1px solid #2a2d3a; background: #1a1d27;
+      color: #666; font-size: 13px; cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn.active {
+      border-color: #639922; background: #1a2e12; color: #639922; font-weight: 600;
+    }
+
+    /* ── game card ── */
+    .game-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .game-card.top-pick { border-color: #639922; }
+
+    .card-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .card-header:hover { background: #1e2130; }
+
+    .card-left { display: flex; align-items: center; gap: 14px; }
+
+    .rank-badge {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #2a2d3a; display: flex; align-items: center;
+      justify-content: center; font-size: 12px; font-weight: 600;
+      color: #888; flex-shrink: 0;
+    }
+    .rank-badge.rank-1 { background: #639922; color: #fff; }
+
+    .matchup-teams { font-size: 15px; font-weight: 600; color: #e8e8e8; }
+    .matchup-teams .vs { color: #555; font-weight: 400; }
+    .matchup-meta { font-size: 12px; color: #666; margin-top: 2px; }
+
+    .card-right { display: flex; align-items: center; gap: 12px; }
+
+    .signal-badge {
+      font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 6px;
+    }
+    .chevron { color: #555; font-size: 12px; }
+
+    /* signal bar */
+    .signal-bar { height: 3px; background: #12141c; }
+    .signal-fill { height: 100%; border-radius: 0 2px 2px 0; }
+
+    /* stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: #12141c;
+    }
+    .stat-cell {
+      background: #1a1d27;
+      padding: 12px 18px;
+      border-top: 1px solid #12141c;
+    }
+    .stat-label {
+      font-size: 11px; color: #555;
+      text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px;
+    }
+    .stat-val { font-size: 20px; font-weight: 600; color: #e8e8e8; font-family: monospace; }
+    .stat-val.green { color: #639922; }
+    .stat-sub { font-size: 11px; color: #444; margin-top: 2px; }
+
+    /* expandable detail */
+    .card-detail {
+      padding: 16px 18px;
+      border-top: 1px solid #12141c;
+      display: none;
+    }
+    .card-detail.open { display: block; }
+
+    .detail-heading {
+      font-size: 12px; color: #666; margin-bottom: 12px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .team-box { background: #12141c; border-radius: 8px; padding: 12px 14px; }
+    .team-role { font-size: 12px; color: #666; margin-bottom: 4px; }
+    .team-name { font-size: 14px; font-weight: 600; color: #ccc; margin-bottom: 8px; }
+    .team-avgs { display: flex; gap: 16px; }
+    .avg-item {}
+    .avg-val { font-size: 18px; font-weight: 600; font-family: monospace; }
+    .avg-val.primary { color: #e8e8e8; }
+    .avg-val.secondary { color: #888; }
+    .avg-label { font-size: 11px; color: #555; }
+
+    .explanation {
+      background: #12141c; border-radius: 8px;
+      padding: 12px 14px; font-size: 13px; color: #888; line-height: 1.7;
+    }
+    .explanation strong { color: #ccc; }
+    .explanation .highlight-green { color: #639922; font-weight: 600; }
+    .explanation .highlight-red { color: #A32D2D; font-weight: 600; }
+    .explanation .highlight-white { color: #e8e8e8; font-weight: 600; }
+
+    .model-note { margin-top: 10px; font-size: 11px; color: #444; }
+
+    /* how it works */
+    .how-it-works {
+      margin-top: 32px;
+      background: #1a1d27; border: 1px solid #2a2d3a;
+      border-radius: 12px; padding: 20px 24px;
+    }
+    .how-heading {
+      font-size: 13px; font-weight: 600; color: #888;
+      margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .how-step {}
+    .step-num {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: #2a2d3a; display: flex; align-items: center;
+      justify-content: center; font-size: 11px; font-weight: 700;
+      color: #639922; margin-bottom: 8px;
+    }
+    .step-title { font-size: 13px; font-weight: 600; color: #ccc; margin-bottom: 4px; }
+    .step-body { font-size: 12px; color: #555; line-height: 1.6; }
+
+    /* states */
+    .state-box { text-align: center; padding: 60px 0; color: #555; }
+    .state-icon { font-size: 32px; margin-bottom: 12px; }
+    .state-title { font-size: 15px; color: #666; }
+    .state-sub { font-size: 13px; margin-top: 6px; color: #444; }
+
+    .error-box {
+      background: #2a1212; border: 1px solid #4a2020;
+      border-radius: 10px; padding: 20px 24px; color: #cc6666;
+    }
+    .error-title { font-weight: 600; margin-bottom: 4px; }
+    .error-sub { font-size: 13px; }
+    .retry-btn {
+      margin-top: 12px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid #4a2020; background: transparent;
+      color: #cc6666; cursor: pointer; font-size: 13px;
+    }
+
+    .footer {
+      margin-top: 24px; font-size: 11px;
+      color: #333; text-align: center; line-height: 1.8;
+    }
+
+    @media (max-width: 600px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .how-grid { grid-template-columns: 1fr; }
+      .team-grid { grid-template-columns: 1fr; }
+      .card-right .signal-badge { display: none; }
+    }
+  </style>
+</head>
+<body>
+<main>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <span class="header-title">⚾ MLB Over 5.5 Runs</span>
+      <span class="live-badge">LIVE</span>
+    </div>
+    <p class="header-desc">
+      We look at how many runs each team has scored in their last 5 and 10 games,
+      then estimate the probability of a combined score over 5.5.
+      Games are ranked from highest to lowest opportunity.
+    </p>
+    <div class="header-meta" id="header-meta"></div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics" id="metrics" style="display:none;">
+    <div class="metric">
+      <div class="metric-label">Games today</div>
+      <div class="metric-val mono" id="m-games">—</div>
+      <div class="metric-sub">not yet final</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Over signals</div>
+      <div class="metric-val mono" id="m-over">—</div>
+      <div class="metric-sub">model edge above market</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Top opportunity</div>
+      <div class="metric-val mono" id="m-top">—</div>
+      <div class="metric-sub">model vs market edge</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters" id="filters" style="display:none;">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All games</button>
+    <button class="filter-btn" data-filter="over" onclick="setFilter('over')">Over signals only</button>
+    <button class="filter-btn" data-filter="strong" onclick="setFilter('strong')">🔥 Strong signals only</button>
+  </div>
+
+  <!-- Cards container -->
+  <div id="cards">
+    <div class="state-box">
+      <div class="state-icon">⏳</div>
+      <div class="state-title">Loading today's games…</div>
+      <div class="state-sub">Fetching MLB data and calculating signals</div>
+    </div>
+  </div>
+
+  <!-- How it works (hidden until data loads) -->
+  <div class="how-it-works" id="how" style="display:none;">
+    <div class="how-heading">How it works</div>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="step-num">1</div>
+        <div class="step-title">We pull recent scoring</div>
+        <div class="step-body">For every team playing today, we look at how many runs they scored in their last 5 and 10 games.</div>
+      </div>
+      <div class="how-step">
+        <div class="step-num">2</div>
+        <div class="step-title">We estimate the probability</div>
+        <div class="step-body">Using a Poisson model, we calculate the chance that both teams combined score more than 5.5 runs.</div>
+      </div>
+      <div class="how-step">
+        <div class="step-num">3</div>
+        <div class="step-title">We compare to the market</div>
+        <div class="step-body">We rank games where our model is most bullish on the over. Kalshi odds will be added soon for real edge calculation.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Data from MLB Stats API (free, official) · Not financial advice · Kalshi integration coming in v2
+  </div>
+
+</main>
+
+<script>
+  const MLB = 'https://statsapi.mlb.com/api/v1'
+  const LINE = 5.5
+  let allGames = []
+  let currentFilter = 'all'
+
+  // ── Poisson model ─────────────────────────────────────────────────────────
+  function poissonCDF(lambda, k) {
+    let sum = 0, term = Math.exp(-lambda)
+    for (let i = 0; i <= k; i++) {
+      sum += term
+      if (i < k) term *= lambda / (i + 1)
+    }
+    return sum
+  }
+  function probOver(lambda) { return 1 - poissonCDF(lambda, Math.floor(LINE)) }
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function pct(n) { return (n * 100).toFixed(1) + '%' }
+
+  function signalLabel(edge) {
+    if (edge >= 0.12) return { text: '🔥 Strong over signal', color: '#3B6D11', bg: '#EAF3DE' }
+    if (edge >= 0.06) return { text: '📈 Mild over signal',   color: '#854F0B', bg: '#FAEEDA' }
+    if (edge >= 0.01) return { text: '➡️ Slight lean over',   color: '#5F5E5A', bg: '#F1EFE8' }
+    if (edge >= -0.05)return { text: '⚖️ Roughly fair',       color: '#5F5E5A', bg: '#F1EFE8' }
+    return                   { text: '📉 Under signal',        color: '#A32D2D', bg: '#FCEBEB' }
+  }
+
+  function barWidth(edge) { return Math.min(100, Math.max(4, Math.abs(edge) * 500)) }
+  function barColor(edge) {
+    if (edge >= 0.12) return '#639922'
+    if (edge >= 0.06) return '#BA7517'
+    if (edge >= 0)    return '#888780'
+    return '#A32D2D'
+  }
+
+  // ── fetch team run averages ───────────────────────────────────────────────
+  async function fetchTeamAvgs(teamId, season) {
+    try {
+      const res = await fetch(`${MLB}/teams/${teamId}/stats?stats=gameLog&group=hitting&season=${season}&limit=10`)
+      const data = await res.json()
+      const logs = (data.stats?.[0]?.splits || []).slice(-10).map(s => parseFloat(s.stat?.runs) || 0)
+      const l5 = logs.slice(-5)
+      return {
+        avgL5:  l5.length   ? l5.reduce((a,b)=>a+b,0)/l5.length   : 4.5,
+        avgL10: logs.length ? logs.reduce((a,b)=>a+b,0)/logs.length : 4.5,
+      }
+    } catch {
+      return { avgL5: 4.5, avgL10: 4.5 }
+    }
+  }
+
+  // ── main data load ────────────────────────────────────────────────────────
+  async function loadGames() {
+    const today = new Date().toISOString().split('T')[0]
+    const season = new Date().getFullYear()
+
+    const res = await fetch(`${MLB}/schedule?sportId=1&date=${today}&hydrate=team,venue,linescore`)
+    const data = await res.json()
+    const games = (data.dates?.[0]?.games || []).filter(g => g.status?.abstractGameState !== 'Final')
+
+    const results = await Promise.all(games.map(async g => {
+      const awayId = g.teams?.away?.team?.id
+      const homeId = g.teams?.home?.team?.id
+      const [a, h] = await Promise.all([fetchTeamAvgs(awayId, season), fetchTeamAvgs(homeId, season)])
+
+      const combinedL5  = a.avgL5  + h.avgL5
+      const combinedL10 = a.avgL10 + h.avgL10
+      const lambda      = combinedL5 * 0.6 + combinedL10 * 0.4
+      const modelProb   = probOver(lambda)
+      const edge        = modelProb - 0.5
+
+      const gameTime = g.gameDate
+        ? new Date(g.gameDate).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' })
+        : 'TBD'
+
+      return {
+        gameId: g.gamePk,
+        away: g.teams?.away?.team?.name || 'Away',
+        home: g.teams?.home?.team?.name || 'Home',
+        venue: g.venue?.name || '—',
+        gameTime,
+        awayL5: +a.avgL5.toFixed(2),  awayL10: +a.avgL10.toFixed(2),
+        homeL5: +h.avgL5.toFixed(2),  homeL10: +h.avgL10.toFixed(2),
+        combinedL5: +combinedL5.toFixed(2),
+        combinedL10: +combinedL10.toFixed(2),
+        modelProb: +modelProb.toFixed(4),
+        marketProb: 0.5,
+        edge: +edge.toFixed(4),
+      }
+    }))
+
+    results.sort((a, b) => b.edge - a.edge)
+    return results
+  }
+
+  // ── render helpers ────────────────────────────────────────────────────────
+  function setFilter(f) {
+    currentFilter = f
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === f)
+    })
+    renderCards()
+  }
+
+  function renderCards() {
+    const filtered = allGames.filter(g => {
+      if (currentFilter === 'over')   return g.edge > 0
+      if (currentFilter === 'strong') return g.edge >= 0.06
+      return true
+    })
+
+    const container = document.getElementById('cards')
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="state-box">
+          <div class="state-title">No games match this filter</div>
+          <button onclick="setFilter('all')" style="margin-top:10px;color:#639922;background:none;border:none;cursor:pointer;font-size:13px;">Show all games</button>
+        </div>`
+      return
+    }
+
+    container.innerHTML = filtered.map((g, i) => buildCard(g, i + 1)).join('')
+  }
+
+  function buildCard(g, rank) {
+    const sig = signalLabel(g.edge)
+    const bw  = barWidth(g.edge)
+    const bc  = barColor(g.edge)
+    const edgeSign = g.edge >= 0 ? '+' : ''
+    const probColor = g.modelProb > 0.5 ? 'green' : ''
+
+    const explanationClass = g.modelProb > 0.5 ? 'highlight-green' : 'highlight-red'
+    const extraNote = g.edge > 0.05
+      ? ' That is meaningfully higher than what the market is currently pricing, which is why this game shows up near the top.'
+      : g.edge <= 0
+      ? ' The market appears fairly priced or slightly better than our model estimate for this game.'
+      : ''
+
+    return `
+    <div class="game-card ${rank === 1 ? 'top-pick' : ''}" id="card-${g.gameId}">
+      <div class="card-header" onclick="toggleCard(${g.gameId})">
+        <div class="card-left">
+          <div class="rank-badge ${rank === 1 ? 'rank-1' : ''}">${rank}</div>
+          <div>
+            <div class="matchup-teams">${g.away} <span class="vs">@</span> ${g.home}</div>
+            <div class="matchup-meta">${g.gameTime} · ${g.venue}</div>
+          </div>
+        </div>
+        <div class="card-right">
+          <span class="signal-badge" style="background:${sig.bg};color:${sig.color}">${sig.text}</span>
+          <span class="chevron" id="chev-${g.gameId}">▼</span>
+        </div>
+      </div>
+
+      <div class="signal-bar">
+        <div class="signal-fill" style="width:${bw}%;background:${bc}"></div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-cell">
+          <div class="stat-label">Run line</div>
+          <div class="stat-val mono">${LINE.toFixed(1)}</div>
+          <div class="stat-sub">over/under</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Avg runs last 5</div>
+          <div class="stat-val mono">${g.combinedL5.toFixed(1)}</div>
+          <div class="stat-sub">both teams combined</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Model says over</div>
+          <div class="stat-val mono ${probColor}">${pct(g.modelProb)}</div>
+          <div class="stat-sub">based on recent scoring</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Market says over</div>
+          <div class="stat-val mono">${pct(g.marketProb)}</div>
+          <div class="stat-sub">Kalshi — coming soon</div>
+        </div>
+      </div>
+
+      <div class="card-detail" id="detail-${g.gameId}">
+        <div class="detail-heading">Breakdown</div>
+        <div class="team-grid">
+          <div class="team-box">
+            <div class="team-role">Away</div>
+            <div class="team-name">${g.away}</div>
+            <div class="team-avgs">
+              <div class="avg-item">
+                <div class="avg-val primary mono">${g.awayL5.toFixed(1)}</div>
+                <div class="avg-label">avg runs, last 5</div>
+              </div>
+              <div class="avg-item">
+                <div class="avg-val secondary mono">${g.awayL10.toFixed(1)}</div>
+                <div class="avg-label">avg runs, last 10</div>
+              </div>
+            </div>
+          </div>
+          <div class="team-box">
+            <div class="team-role">Home</div>
+            <div class="team-name">${g.home}</div>
+            <div class="team-avgs">
+              <div class="avg-item">
+                <div class="avg-val primary mono">${g.homeL5.toFixed(1)}</div>
+                <div class="avg-label">avg runs, last 5</div>
+              </div>
+              <div class="avg-item">
+                <div class="avg-val secondary mono">${g.homeL10.toFixed(1)}</div>
+                <div class="avg-label">avg runs, last 10</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="explanation">
+          <strong>What does this mean?</strong><br>
+          Combined, these two teams have averaged
+          <span class="highlight-white">${g.combinedL5.toFixed(1)} runs per game</span>
+          over their last 5 games. The line is set at
+          <span class="highlight-white">${LINE}</span> runs.
+          Our model estimates a
+          <span class="${explanationClass}">${pct(g.modelProb)} chance</span>
+          this game goes over ${LINE} runs.${extraNote}
+        </div>
+        <div class="model-note">
+          Model uses a Poisson distribution blending L5 (60%) and L10 (40%) run averages.
+          Market probability is a placeholder (50%) until Kalshi integration is live.
+        </div>
+      </div>
+    </div>`
+  }
+
+  function toggleCard(gameId) {
+    const detail = document.getElementById(`detail-${gameId}`)
+    const chev   = document.getElementById(`chev-${gameId}`)
+    const isOpen = detail.classList.contains('open')
+    detail.classList.toggle('open', !isOpen)
+    chev.textContent = isOpen ? '▼' : '▲'
+  }
+
+  // ── init ──────────────────────────────────────────────────────────────────
+  async function init() {
+    try {
+      allGames = await loadGames()
+
+      if (allGames.length === 0) {
+        document.getElementById('cards').innerHTML = `
+          <div class="state-box">
+            <div class="state-icon">🌙</div>
+            <div class="state-title">No games scheduled today</div>
+            <div class="state-sub">Check back tomorrow</div>
+          </div>`
+        return
+      }
+
+      // update metrics
+      const overCount = allGames.filter(g => g.edge > 0).length
+      const topEdge   = Math.max(...allGames.map(g => g.edge))
+      document.getElementById('m-games').textContent = allGames.length
+      document.getElementById('m-over').textContent  = overCount
+      const topEl = document.getElementById('m-top')
+      topEl.textContent = (topEdge >= 0 ? '+' : '') + (topEdge * 100).toFixed(1) + '%'
+      if (topEdge > 0.05) topEl.classList.add('green')
+      if (overCount > 0)  document.getElementById('m-over').classList.add('green')
+
+      document.getElementById('header-meta').textContent =
+        `Last updated ${new Date().toLocaleTimeString()} · Data from MLB Stats API`
+
+      document.getElementById('metrics').style.display = 'grid'
+      document.getElementById('filters').style.display = 'flex'
+      document.getElementById('how').style.display     = 'block'
+
+      renderCards()
+
+    } catch (err) {
+      console.error(err)
+      document.getElementById('cards').innerHTML = `
+        <div class="error-box">
+          <div class="error-title">Could not load games</div>
+          <div class="error-sub">${err.message}</div>
+          <button class="retry-btn" onclick="init()">Try again</button>
+        </div>`
+    }
+  }
+
+  init()
+</script>
+</body>
+</html>
